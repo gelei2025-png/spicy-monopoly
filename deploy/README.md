@@ -6,7 +6,31 @@
 
 ---
 
-## 一、Docker Compose（推荐）
+## 零、最省事：一键部署到 Render（连服务器都不用买）
+
+1. 在 Render 用 GitHub 登录，New → Blueprint，选**你这个 fork 仓库**（`render.yaml` 已在根目录）；
+2. Render 按 `render.yaml` 建两个免费 Web Service，并自动签发 HTTPS 域名；
+3. 等两个服务都 Live，把 MCP 服务的域名后面加 `/mcp` 就是接入地址：
+
+```json
+{
+  "mcpServers": {
+    "spicy-monopoly": {
+      "type": "http",
+      "url": "https://spicy-monopoly-mcp-xxxx.onrender.com/mcp"
+    }
+  }
+}
+```
+
+**免费档要知道的两件事：**
+
+- **会休眠**：15 分钟没有入站流量就睡，下次连上要等约 1 分钟唤醒（开局前先连一次热热身）。
+- **不存盘**：免费档没有持久磁盘，**重新部署 / 重启会丢掉进行中的对局**。想留住存档就把 `render.yaml` 里两个 `plan: free` 改成 `starter`，并取消 `monopoly-api` 那段 `disk:` 的注释。
+
+---
+
+## 一、Docker Compose（自备机器）
 
 ```bash
 git clone https://github.com/RennAkira/spicy-monopoly.git
@@ -32,6 +56,7 @@ docker compose logs -f api
 {
   "mcpServers": {
     "spicy-monopoly": {
+      "type": "http",
       "url": "https://mcp.example.com/mcp"
     }
   }
@@ -44,6 +69,7 @@ docker compose logs -f api
 {
   "mcpServers": {
     "spicy-monopoly": {
+      "type": "http",
       "url": "https://mcp.example.com/mcp",
       "headers": { "Authorization": "Bearer <你的token>" }
     }
@@ -64,8 +90,7 @@ monopoly-swap-log.jsonl      # 换卡日志
 monopoly-feedback.jsonl      # 众包反馈
 ```
 
-备份就是把仓库目录打包 / 把这几个文件拷走。
-它们都在 `.gitignore` 里，`git status` 不会被弄脏。
+备份就是把这几个文件拷走。它们都在 `.gitignore` 里，`git status` 不会被弄脏。
 
 ---
 
@@ -138,6 +163,10 @@ Cloudflare 把「静默」的连接当成死连接、约 100s 就切断，那天
 **自己架的时候别把这层命脉堵回去**：任何会缓冲（gzip、`proxy_buffering on`、
 默认的 `flush_interval`）或提前超时（read timeout 太短）的中间层，都会让心跳
 失效、回到重连地狱。
+
+托管平台上的替代做法：把 `SPICY_MONOPOLY_MCP_JSON_RESPONSE` 设成 `true`
+（`render.yaml` 里已经这么设了），走普通 JSON 响应而不是长连接的 SSE，
+在 PaaS 的代理后面最稳。
 
 ---
 

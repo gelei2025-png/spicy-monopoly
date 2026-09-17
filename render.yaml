@@ -1,0 +1,68 @@
+# Render Blueprint —— 一键部署「游戏 API + 远程 MCP」
+#
+# 用法（不用装任何东西）：
+#   1. 在 Render 点 New → Blueprint，选你这个 fork 仓库；
+#      （或直接点 deploy/README.md 里的 "Deploy to Render" 按钮）
+#   2. Render 读这个文件，建两个 Web Service，自动签发 HTTPS 域名。
+#   3. 拿到域名后，MCP 客户端填：
+#        https://<mcp 服务的域名>/mcp
+#
+# ⚠️ 两件事先说清楚：
+#   · 免费实例 15 分钟没流量会休眠，下次连上要等约 1 分钟唤醒；
+#   · 免费实例没有持久磁盘，重新部署 / 重启会丢掉进行中的对局。
+#     介意的话把下面两个 plan 改成 starter，再按注释加一块 disk。
+
+services:
+  # ── 游戏 API（FastAPI，monopoly_api.py）──────────────────
+  - type: web
+    name: spicy-monopoly-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: free
+    region: singapore
+    # 镜像里的 CMD 把端口写死成 8069；Render 只会把服务暴露在它注入的 $PORT 上，
+    # 所以这里覆盖一下启动命令。$PORT 由 Render 展开。
+    dockerCommand: uvicorn monopoly_api:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: TZ
+        value: Asia/Shanghai
+      - key: PYTHONUNBUFFERED
+        value: "1"
+    # 改 starter 后如果想留住对局存档，取消下面注释把仓库目录挂上去：
+    # disk:
+    #   name: data
+    #   mountPath: /app
+    #   sizeGB: 1
+
+  # ── 远程 MCP（mcp-server.js，Streamable HTTP）──────────
+  - type: web
+    name: spicy-monopoly-mcp
+    runtime: docker
+    dockerfilePath: ./deploy/mcp.Dockerfile
+    dockerContext: .
+    plan: free
+    region: singapore
+    envVars:
+      # 指向上面那个 API 服务；RENDER_EXTERNAL_URL 由 Render 自动注入
+      - key: SPICY_MONOPOLY_BASE_URL
+        fromService:
+          type: web
+          name: spicy-monopoly-api
+          envVarKey: RENDER_EXTERNAL_URL
+      - key: SPICY_MONOPOLY_MCP_TRANSPORT
+        value: http
+      - key: SPICY_MONOPOLY_MCP_HOST
+        value: 0.0.0.0
+      # 注意：这里【不要】设 SPICY_MONOPOLY_MCP_PORT，
+      # 让它回退到 Render 注入的 PORT，否则端口对不上。
+      #
+      # Bearer token：留空 = 不校验；公开给外网建议在 Render 面板里填一个随机串
+      # （本地生成：openssl rand -hex 32），客户端带 Authorization: Bearer <token>
+      - key: SPICY_MONOPOLY_MCP_BEARER_TOKEN
+        sync: false
+      # 用普通 JSON 响应（不是 SSE），在 PaaS 上过代理更稳
+      - key: SPICY_MONOPOLY_MCP_JSON_RESPONSE
+        value: "true"
+      - key: TZ
+        value: Asia/Shanghai
