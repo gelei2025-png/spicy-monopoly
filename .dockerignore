@@ -1,0 +1,27 @@
+# 别把运行时产物、本地环境和 git 历史塞进镜像上下文
+
+.git
+.gitignore
+
+# 运行时产物（都和 .gitignore 里那份保持一致）
+monopoly-state.json
+monopoly-games/
+monopoly-seen/
+monopoly-swap-log.jsonl
+monopoly-feedback.jsonl
+monopoly-admin.key
+
+# 本地环境
+.env
+.venv/
+venv/
+node_modules/
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# 备份/临时
+*.bak
+*.bak.*
+pending_*.json
+*.tmp

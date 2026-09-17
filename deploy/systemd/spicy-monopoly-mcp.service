@@ -1,0 +1,39 @@
+# 配合 spicy-monopoly-api.service 使用（宿主机直跑，不用 Docker）。
+#
+#   cd /opt/spicy-monopoly && sudo -u spicy npm ci --omit=dev
+#   sudo cp deploy/systemd/spicy-monopoly-mcp.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now spicy-monopoly-mcp
+#
+# 公开部署请在 /etc/spicy-monopoly.env 里加一行随机 token：
+#   SPICY_MONOPOLY_MCP_BEARER_TOKEN=<openssl rand -hex 32>
+# （systemd 的 Environment= 会被 EnvironmentFile 覆盖，所以放文件里最省事。）
+
+[Unit]
+Description=Spicy Monopoly remote MCP server (Streamable HTTP + SSE)
+Documentation=https://github.com/RennAkira/spicy-monopoly
+After=network-online.target spicy-monopoly-api.service
+Wants=network-online.target
+Requires=spicy-monopoly-api.service
+
+[Service]
+Type=simple
+User=spicy
+Group=spicy
+WorkingDirectory=/opt/spicy-monopoly
+EnvironmentFile=-/etc/spicy-monopoly.env
+Environment=SPICY_MONOPOLY_MCP_TRANSPORT=http
+Environment=SPICY_MONOPOLY_MCP_HOST=127.0.0.1
+Environment=SPICY_MONOPOLY_MCP_PORT=3000
+Environment=SPICY_MONOPOLY_BASE_URL=http://127.0.0.1:8069
+ExecStart=/usr/bin/node /opt/spicy-monopoly/mcp-server.js --http
+Restart=on-failure
+RestartSec=3
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/spicy-monopoly
+
+[Install]
+WantedBy=multi-user.target

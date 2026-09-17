@@ -1,0 +1,38 @@
+# 不用 Docker、直接在宿主机跑的做法：
+#
+#   sudo useradd --system --home /opt/spicy-monopoly --shell /usr/sbin/nologin spicy
+#   sudo git clone https://github.com/RennAkira/spicy-monopoly.git /opt/spicy-monopoly
+#   cd /opt/spicy-monopoly && sudo -u spicy python3 -m venv .venv
+#   sudo -u spicy .venv/bin/pip install -r requirements.txt
+#   sudo cp deploy/systemd/spicy-monopoly-api.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now spicy-monopoly-api
+#
+# 可选配置放 /etc/spicy-monopoly.env（如 TZ、PIP 镜像等）。
+# 对外暴露仍建议走 deploy/Caddyfile 那层反代。
+
+[Unit]
+Description=Spicy Monopoly HTTP API (uvicorn)
+Documentation=https://github.com/RennAkira/spicy-monopoly
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=spicy
+Group=spicy
+WorkingDirectory=/opt/spicy-monopoly
+EnvironmentFile=-/etc/spicy-monopoly.env
+ExecStart=/opt/spicy-monopoly/.venv/bin/uvicorn monopoly_api:app --host 127.0.0.1 --port 8069
+Restart=on-failure
+RestartSec=3
+
+# 运行时状态（monopoly-state.json / monopoly-games/ 等）就写在 WorkingDirectory，
+# 所以只放开这一个目录的写权限，其余保持只读。
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/spicy-monopoly
+
+[Install]
+WantedBy=multi-user.target

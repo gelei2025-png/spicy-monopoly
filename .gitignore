@@ -8,6 +8,9 @@ monopoly-swap-log.jsonl
 monopoly-feedback.jsonl
 monopoly-admin.key
 
+# ── 本地配置（从 .env.example 复制而来，含 bearer token，别提交）──
+.env
+
 # ── Python ──
 __pycache__/
 *.py[cod]

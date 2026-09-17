@@ -1,0 +1,41 @@
+# deploy/Caddyfile —— 自建部署的 HTTPS + SSE 友好反代
+#
+# 两种用法：
+#   A) Caddy 跑在宿主机：上游写 127.0.0.1:3000 / 127.0.0.1:8069
+#   B) Caddy 也塞进同一个 compose 网络：上游写 mcp:3000 / api:8069
+#
+# ⚠️ SSE 的关键是「别缓冲」。作者在 2026-08-02 的提交里正是因为
+#    「静默连接被 Cloudflare 约 100s 掐断」（那天 121936 次 GET /mcp 对应
+#    只有 1549 次有效调用）才加上了 25s 一跳的心跳帧。
+#    flush_interval -1 让每一帧立刻出去，心跳才真的能续上命。
+#    同理：此处【不要】开 encode / gzip —— 压缩层会把帧攒在缓冲区里，
+#    等于把心跳又堵回去了。
+#
+# 改完域名后：caddy validate --config deploy/Caddyfile && caddy reload
+
+{
+	email you@example.com
+}
+
+# 远程 MCP：客户端填 https://mcp.example.com/mcp
+mcp.example.com {
+	reverse_proxy mcp:3000 {
+		flush_interval -1
+	}
+
+	# 如果容器里设了 SPICY_MONOPOLY_MCP_BEARER_TOKEN，
+	# Authorization 头会原样透传，这里不需要额外配置。
+}
+
+# HTTP API（给「把手册甩给 AI 跑」那条玩法用）：https://api.example.com
+# ⚠️ API 自身没有鉴权，公开前务必加一层。
+api.example.com {
+	reverse_proxy api:8069 {
+		flush_interval -1
+	}
+
+	# 不想写代码就用 basic_auth（密码用 caddy hash-password 生成）：
+	# basic_auth {
+	# 	you $2a$14$xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+	# }
+}
