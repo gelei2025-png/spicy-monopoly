@@ -1,0 +1,65 @@
+# 涩涩大富翁 —— 一条命令自建（API + 远程 MCP）
+#
+#   cp .env.example .env      # 按需改端口 / 设 bearer token
+#   docker compose up -d --build
+#
+# 默认只监听 127.0.0.1：想给外网用，请在前面挂 HTTPS 反代
+# （见 deploy/Caddyfile），并至少设一个 MCP_BEARER_TOKEN。
+#
+# 关于「对局会不会丢」：运行时产物（monopoly-state.json、monopoly-games/、
+# monopoly-seen/、monopoly-swap-log.jsonl、monopoly-feedback.jsonl，
+# 见 .gitignore）都是相对代码目录生成的，所以这里把仓库目录 bind 进容器 ——
+# 状态落在宿主机上，容器重建 / 升级也不会丢局；顺带改代码不用重新 build，
+# 在宿主机上 git pull 再 docker compose restart 就行。
+
+name: spicy-monopoly
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: spicy-monopoly-api:local
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ:-Asia/Shanghai}
+    volumes:
+      - .:/app
+    ports:
+      - "${API_BIND:-127.0.0.1}:${API_PORT:-8069}:8069"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket;socket.create_connection(('127.0.0.1',8069),4).close()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  mcp:
+    build:
+      context: .
+      dockerfile: deploy/mcp.Dockerfile
+    image: spicy-monopoly-mcp:local
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      SPICY_MONOPOLY_BASE_URL: http://api:8069
+      SPICY_MONOPOLY_MCP_TRANSPORT: http
+      SPICY_MONOPOLY_MCP_HOST: 0.0.0.0
+      SPICY_MONOPOLY_MCP_PORT: "3000"
+      # 留空 = 不校验；公开部署务必填一个随机值（openssl rand -hex 32）
+      SPICY_MONOPOLY_MCP_BEARER_TOKEN: ${MCP_BEARER_TOKEN:-}
+      TZ: ${TZ:-Asia/Shanghai}
+    volumes:
+      - .:/app
+      # 匿名卷保住镜像里那份 node_modules，别被上面的 bind 盖掉
+      - /app/node_modules
+    ports:
+      - "${MCP_BIND:-127.0.0.1}:${MCP_PORT:-3000}:3000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('net').connect(3000,'127.0.0.1').on('connect',()=>process.exit(0)).on('error',()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
